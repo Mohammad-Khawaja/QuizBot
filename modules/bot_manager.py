@@ -12,6 +12,7 @@ from telegram.ext import (
 from .task_performer import TaskPerformer
 from .united import UserStates, Tasks, TemporaryUser, TypesInline
 from .inline_handler import InlineHandler
+from .callack_schemas import CALLBACK_SCHEMAS
 
 from threading import Thread, Lock
 import time
@@ -64,7 +65,7 @@ class BotManager:
 
 		self.settings_start()
 
-		self.app.run_polling()
+		self.app.run_polling(timeout=30)
 
 	def settings_start(self):
 		"""تنظیمات اولیه ربات"""
@@ -129,20 +130,12 @@ class BotManager:
 	async def robot_start_warning(self, app):
 		print("Robot started!")
 
-	async def handle_get_start_command(
-		self,
-		update: Update,
-		context: ContextTypes.DEFAULT_TYPE
-	):
+	async def handle_get_start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 		"""هندل دستور /start"""
 
 		await self.task_performer.start(update.message)
 
-	async def message_handle(
-		self,
-		update: Update,
-		context: ContextTypes.DEFAULT_TYPE
-	):
+	async def message_handle(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 		"""هندل پیام‌های خصوصی"""
 
 		message = update.message
@@ -184,6 +177,34 @@ class BotManager:
 			finally:
 				user.processing = False
 
+	def validate_callback_query(self, action: str, params: tuple, user_id: int) -> tuple:
+		schemas = CALLBACK_SCHEMAS.get(action, None)
+		if schemas is None:
+			return (False, None, "متدی برای این پیدا نشد")
+		
+		if len(params) == len(schemas["params"]):
+			for c_param, r_param in zip(params, schemas["params"]):
+				if not isinstance(c_param, r_param):
+					return (False, None, "نوع پارامتر ها صحیح نیست.")
+		else:
+			return (False, None, "تعداد پارامتر ها صحیح نیست.")
+		
+		self.cursor.execute("SELECT role FROM users WHERE user_id= ?", (user_id,))
+		r = self.cursor.fetchone()
+		if len(r) == 0 or r[0] not in schemas["roles"]:
+			return (False, None, "شما دسترسی مورد نیاز را ندارید")
+		
+		if schemas["inline_type"] == "RTUO":
+			expired = False
+			if (user:=self.users.get(user_id)) is None:
+				expired = True
+			if schemas["state_ids"] not in user.ids:
+				expired = True
+			if expired:
+				return (False, None, "این دکمه منقضی شده است.")
+		
+		return (True, schemas["inline_type"], "معتبر است!")
+	
 	def callback_data_parsing(self, callback_data: str):
 		"""
 		ساختار callback_data:
@@ -204,32 +225,33 @@ class BotManager:
 
 		parts = callback_data.split(":")
 
-		if len(parts) not in [2, 3]:
+		if len(parts) not in [1, 2]:
 			return None
 
-		data, typeinline, *button_id = parts
-
-		if not data or not typeinline:
+		action, *params = parts
+		print(action, params)
+		if not action or "" in params:
 			return None
-
-		if typeinline not in (
-			TypesInline.RTUO,
-			TypesInline.DNRTUO
-		):
-			return None
-
-		button_id = button_id[0] if button_id else ""
-
-		return data, typeinline, button_id
+		
+		if len(params) == 0:
+			params = []
+		else:
+			params = params[0].split("&")
+		
+		new_params = []
+		for p in list(params):
+			if p.isdigit():
+				p = int(p)
+			elif p.count(".") == 1 and p.replec(".", "").isdigit():
+				p = float(p)
+			new_params.append(p)
+		print(new_params)
+		return action, tuple(new_params)
 
 	def remove_inline_from_dict(self, user_id):
 		self.inline_processing.pop(user_id, None)
 
-	async def main_handler_inline_buttons(
-		self,
-		update: Update,
-		context: ContextTypes.DEFAULT_TYPE
-	):
+	async def main_handler_inline_buttons(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 		"""هندل درخواست دکمه‌های Inline"""
 
 		callback_query = update.callback_query
@@ -264,67 +286,42 @@ class BotManager:
 				await callback_query.answer(
 					text="دکمه نامعتبر است."
 				)
-
 				self.remove_inline_from_dict(user_id)
 				return
 
-			data, typeinline, button_id = parsed
-
-			print("data:", data)
-			print("type_inline:", typeinline)
+			action, params = parsed
 			
-			if (
-				typeinline == TypesInline.RTUO
-				and user_id in self.task_performer.users
-			):
+			is_valid, typeinline, msg = self.validate_callback_query(action, params, user_id)
+			if not is_valid:
+				await callback_query.answer(msg)
+				self.remove_inline_from_dict(user_id)
+				return
 
-				user = self.task_performer.users.get(user_id)
-
-				if button_id in user.ids:
-
-					user.last_change_time = time.time()
-
-					await self.RTUO_inline_handler(
-						data,
-						message,
-						user_id,
-						callback_query
-					)
-
-				else:
-
-					await callback_query.answer(
-						text="این دکمه منقضی شده"
-					)
-
-			elif typeinline == TypesInline.RTUO:
-
-				await self.bot.send_message(
-					chat_id=user_id,
-					text=(
-						"وقت گفت‌وگو یا عملیاتت تموم شده. "
-						"اگه به مدت ۳۰ دقیقه فعالیتی نداشته باشی، "
-						"وقتت تموم می‌شه و نمی‌تونی یک گفت‌وگو "
-						"یا عملیات رو ادامه بدی. البته بعضی "
-						"عملیات‌ها محدودیت زمانی ندارن.\n"
-						"لطفا روی دستور /start کلیک کن."
-					)
-				)
-
-			elif typeinline == TypesInline.DNRTUO:
-
-				await self.DNRTUO_inline_handler(
-					data,
+			print("user_id:", user_id)
+			print("action:", action)
+			print("params:", params)
+			print("typeinline:", typeinline)
+			
+			if typeinline == TypesInline.RTUO and user_id in self.task_performer.users:
+				user = self.users.get(user_id)
+				user.last_change_time = time.time()
+				
+				await self.RTUO_inline_handler(
+					action,
+					params,
 					message,
 					user_id,
 					callback_query
 				)
 
-			else:
+			elif typeinline == TypesInline.DNRTUO:
 
-				print(
-					"خطا در تشخیص نوع دکمه inline:",
-					typeinline
+				await self.DNRTUO_inline_handler(
+					action,
+					params,
+					message,
+					user_id,
+					callback_query
 				)
 
 		except Exception:
@@ -341,21 +338,12 @@ class BotManager:
 
 		finally:
 			self.inline_processing.pop(user_id, None)
-			try:
-				await callback_query.answer()
-			except:
-				pass
+			await callback_query.answer()
 
-	async def RTUO_inline_handler(
-		self,
-		data,
-		message,
-		user_id,
-		callback_query
-	):
+	async def RTUO_inline_handler(self, action, params, message, user_id, callback_query):
 		"""هندل دکمه‌هایی که به TemporaryUser نیاز دارند"""
 
-		method_name = data.split("&")[0]
+		method_name = action
 
 		method = self.inline_handlers.get(
 			method_name,
@@ -364,27 +352,16 @@ class BotManager:
 
 		if method:
 			await method(
-				data,
+				params,
 				message,
 				user_id,
 				callback_query
 			)
 
-		else:
-			await callback_query.answer(
-				text="متدی برای این دکمه یافت نشد."
-			)
-
-	async def DNRTUO_inline_handler(
-		self,
-		data,
-		message,
-		user_id,
-		callback_query
-	):
+	async def DNRTUO_inline_handler(self, action, params, message, user_id, callback_query):
 		"""هندل دکمه‌هایی که به TemporaryUser نیاز ندارند"""
 
-		method_name = data.split("&")[0]
+		method_name = action.split("&")[0]
 
 		method = self.inline_handlers.get(
 			method_name,
@@ -393,15 +370,10 @@ class BotManager:
 
 		if method:
 			await method(
-				data,
+				params,
 				message,
 				user_id,
 				callback_query
-			)
-
-		else:
-			await callback_query.answer(
-				text="متدی برای این دکمه یافت نشد."
 			)
 
 	def temporary_users_remover(self):
