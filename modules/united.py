@@ -10,11 +10,19 @@ class UserStates:
 	TITLE = "title"
 	FINAL_APPROVAL = "final_approval"
 	FINAL = "final"
+	ANSWER = "ANSWER"
+	TEXT = "TEXT"
+	QUESTION_TEXT = "QUESTION_TEXT"
+	SELECT_OPTION = "SELECT_OPTION"
 	
 class Tasks:
 	NONE = "NONE"
 	RENAME_CLASS = "RENAME_CLASS"
 	CREATE_NEW_QUIZ = "CREATE_NEW_QUIZ"
+	EDIT_QUIZ_TITLE = "EDIT_QUIZ_TITLE"
+	ADD_QUESTION = "ADD_QUESTION"
+	EDIT_QUESTION_TEXT = "EDIT_QUESTION_TEXT"
+	EDIT_ANSWERS = "EDIT_ANSWERS"
 	
 class TypesInline:
 	"""با توجه به نیازم، دکمه‌های inline را به دو دسته تقسیم کردم"""
@@ -27,7 +35,7 @@ class TemporaryUser:
 	def __init__(self, type_task: str, state: str=UserStates.START):
 		self.type_task: str = type_task #نوع گفت‌وگو
 		self.state: str = state #وضعیت(مرحله گفت‌وگو)
-		self.ids = [] #برای قاطی نشدن با دکمه های RTUO گفت‌وگو های دیگر
+		self.ids = ["defult"] #برای قاطی نشدن با دکمه های RTUO گفت‌وگو های دیگر
 		self.processing: bool = False #اگر برای این کاربر پردازشی درحال انجام باشد، True می‌شود تا از پردازش تکراری جلوگیری شود.
 		self.data: dict = {} #اطلاعات موقت مثل سبد خرید
 		self.last_change_time: int = time.time() #آخرین زمان/تاریخ فعالیت کاربر. به ثانیه
