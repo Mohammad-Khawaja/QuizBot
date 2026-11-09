@@ -11,7 +11,9 @@ class UserStates:
 	FINAL_APPROVAL = "final_approval"
 	FINAL = "final"
 	ANSWER = "ANSWER"
+	TEXT = "TEXT"
 	QUESTION_TEXT = "QUESTION_TEXT"
+	SELECT_OPTION = "SELECT_OPTION"
 	
 class Tasks:
 	NONE = "NONE"
@@ -19,6 +21,8 @@ class Tasks:
 	CREATE_NEW_QUIZ = "CREATE_NEW_QUIZ"
 	EDIT_QUIZ_TITLE = "EDIT_QUIZ_TITLE"
 	ADD_QUESTION = "ADD_QUESTION"
+	EDIT_QUESTION_TEXT = "EDIT_QUESTION_TEXT"
+	EDIT_ANSWERS = "EDIT_ANSWERS"
 	
 class TypesInline:
 	"""با توجه به نیازم، دکمه‌های inline را به دو دسته تقسیم کردم"""

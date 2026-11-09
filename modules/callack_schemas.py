@@ -14,6 +14,24 @@ CALLBACK_SCHEMAS = {
 	"roles": ("teacher",),
 	"state_id": str(uuid4())
 },
+"select_option_for_edit_answer": {
+	"params": (str,),
+	"inline_type": "RTUO",
+	"roles": ("teacher",),
+	"state_id": str(uuid4())
+},
+"select_true_option_for_edit": {
+	"params": (),
+	"inline_type": "RTUO",
+	"roles": ("teacher",),
+	"state_id": str(uuid4())
+},
+"select_option_as_true": {
+	"params": (str,),
+	"inline_type": "RTUO",
+	"roles": ("teacher",),
+	"state_id": str(uuid4())
+},
 
 # DNRTUO
 "back_to_menu": {
@@ -136,6 +154,12 @@ CALLBACK_SCHEMAS = {
 	"roles": ("teacher",),
 	"state_id": None
 },
+"delete_quiz": {
+	"params": (int,),
+	"inline_type": "DNRTUO",
+	"roles": ("teacher",),
+	"state_id": None
+},
 "create_new_quize": {
 	"params": (),
 	"inline_type": "DNRTUO",
@@ -171,6 +195,36 @@ CALLBACK_SCHEMAS = {
 	"inline_type": "DNRTUO",
 	"roles": ("teacher",),
 	"state_id": None
-}
+},
+"disply_questions_to_teacher": {
+	"params": (int,),
+	"inline_type": "DNRTUO",
+	"roles": ("teacher",),
+	"state_id": None
+},
+"edit_question": {
+	"params": (int, int),
+	"inline_type": "DNRTUO",
+	"roles": ("teacher",),
+	"state_id": None
+},
+"delete_question": {
+	"params": (int, int),
+	"inline_type": "DNRTUO",
+	"roles": ("teacher",),
+	"state_id": None
+},
+"edit_question_text": {
+	"params": (int, int),
+	"inline_type": "DNRTUO",
+	"roles": ("teacher",),
+	"state_id": None
+},
+"edit_anwers": {
+	"params": (int, int),
+	"inline_type": "DNRTUO",
+	"roles": ("teacher",),
+	"state_id": None
+},
 
 }

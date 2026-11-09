@@ -291,7 +291,7 @@ class TaskPerformer:
 
 			for class_id, class_name in classes:
 				callback_data = (
-					f"sc_for_create_q:{class_id}&{class_name}&{button_id}"
+					f"sc_for_create_q:{class_id}&{class_name}"
 				)
 
 				inline.append([
@@ -458,7 +458,7 @@ class TaskPerformer:
 		user_state = user.state
 
 		if user_state == UserStates.START:
-			number = user.data["number_question"]
+			number = user.data["number_question"] + 1
 
 			await message.reply_text(
 				text=f"سوال *{number}*\nلطفا متن سوال را بفرست...",
@@ -602,3 +602,65 @@ class TaskPerformer:
 				await message.reply_text(
 					"شما دسترسی مورد نیاز را ندارید یا این آزمون دیگه وجود نداره"
 				)
+	
+	async def edit_question_text(self, message: Message):
+		"""ویرایش متن سوال"""
+		user_id = message.chat_id
+		user = self.users.get(user_id)
+		user_state = user.state
+		
+		if user_state == UserStates.START:
+			await message.reply_text("لطفا متن سوال جدید را بفرستید.")
+			user.state = UserStates.TEXT
+		elif user_state == UserStates.TEXT:
+			text = message.text.strip()
+			async with self.lock:
+				self.cursor.execute("UPDATE questions SET question_text = ? WHERE quiz_id = ? AND question_id = ?", (text, user.data["quiz_id"], user.data["ques_id"]))
+				self.database.commit()
+				rowcount = self.cursor.rowcount
+			if rowcount == 0:
+				await message.reply_text("این آزمون یا سوال دیگه وجود نداره")
+			else:
+				await message.reply_text("متن سوال با موفقیت تغییر کرد.", reply_markup=InlineKeyboardMarkup([self.back_to_menu_button2]))
+				
+	async def edit_answers(self, message: Message):
+		"""ویرایش جواب های سوال"""
+		user_id = message.chat_id
+		user = self.users.get(user_id)
+		user_state = user.state
+		
+		if user_state == UserStates.START:
+			text = "لطفا مشخص کنید مقدار کدام گزینه را میخواهید تغییر دهید:"
+			inline = [
+			[("الف", f"select_option_for_edit_answer:الف")],
+			[("ب", f"select_option_for_edit_answer:ب")],
+			[("پ", f"select_option_for_edit_answer:پ")],
+			[("ت", f"select_option_for_edit_answer:ت")],
+			[("گزینه صحیح", f"select_true_option_for_edit")]
+			]
+			await message.reply_text(text=text, reply_markup=self.create_inline_keyboard(inline))
+			user.state = UserStates.NONE
+			user.ids.append(CALLBACK_SCHEMAS["select_option_for_edit_answer"]["state_id"])
+			user.ids.append(CALLBACK_SCHEMAS["select_true_option_for_edit"]["state_id"])
+		
+		elif user_state == UserStates.SELECT_OPTION:
+			print("")
+			await message.reply_text("حالا میتونی جواب جدید این گزینه را بفرستی")
+			user.state = UserStates.ANSWER
+		
+		elif user_state == UserStates.ANSWER:
+			print("احرا شد")
+			answer = message.text.strip()
+			abcd = {"الف": "a", "ب": "b", "پ": "c", "ت": "d"}
+			option = f"option_{abcd[user.data['option']]}"
+			
+			async with self.lock:
+				self.cursor.execute(f"UPDATE questions SET {option} = ? WHERE quiz_id = ? AND question_id = ? ", (answer, user.data["quiz_id"], user.data["ques_id"]))
+				self.database.commit()
+				rowcount = self.cursor.rowcount
+			
+			if rowcount == 0:
+				await message.reply_text("این سوال یا آزمون حذف شده است")
+			else:
+				await message.reply_text("جواب جدید با موفقیت اعمال شد!", reply_markup=InlineKeyboardMarkup([self.back_to_menu_button2]))
+			del self.users[user]

@@ -2,7 +2,7 @@ from telegram import Message, InlineKeyboardButton, InlineKeyboardMarkup, Callba
 from sqlite3 import Connection, Cursor, IntegrityError
 from .united import TemporaryUser
 from .task_performer import UserStates, Tasks, TaskPerformer
-
+from .callack_schemas import CALLBACK_SCHEMAS
 
 class InlineAttributes:
 	def __init__(self, bot, lock, task_performer):
@@ -217,7 +217,44 @@ class RTUOInlines(InlineAttributes):
 		user.data["position"] = count + 1
 
 		await self.task_performer.add_question(message)
-
+	
+	async def select_option_for_edit_answer(self, params: tuple, message: Message, user_id: int, callback_query: CallbackQuery):
+		"""انتخواب یک گزینه برای ویرایش جواب آن"""
+		option = params[0]
+		user = self.task_performer.users.get(user_id)
+		user.data["option"] = option
+		user.state = UserStates.SELECT_OPTION
+		await self.task_performer.edit_answers(message)
+		user.ids = ["defult"]
+	
+	async def select_true_option_for_edit(self, params: tuple, message: Message, user_id: int, callback_query: CallbackQuery):
+		"""نمایش گزینه ها برای انتخواب گزینه درست"""
+		text = "لطفا انتخواب کنید که میخواهید کدام گزینه را به عنوان صحیح انتخواب کنید."
+		inline = [
+		[("الف", "select_option_as_true:a")],
+		[("ب", "select_option_as_true:b")],
+		[("پ", "select_option_as_true:c")],
+		[("ت", "select_option_as_true:d")]
+		]
+		(user:=self.task_performer.users.get(user_id)).ids.remove(CALLBACK_SCHEMAS["select_true_option_for_edit"]["state_id"])
+		user.ids.append(CALLBACK_SCHEMAS["select_option_as_true"]["state_id"])
+		await message.edit_text(text, reply_markup=self.create_inline_keyboard(inline))
+	
+	async def select_option_as_true(self, params: tuple, message: Message, user_id: int, callback_query: CallbackQuery):
+		"""انتخواب گزینه برای انتخواب به عنوان صحیح"""
+		option = params[0]
+		if option not in ["a", "b", "c", "d"]:
+			await callback_query.answer("پارامتر صحیح نیست")
+			return 
+		if self.task_performer.check_access_to_quiz((user:=self.task_performer.users[user_id]).data["quiz_id"], user_id):
+			async with self.lock:
+				self.cursor.execute("UPDATE questions SET correct_option = ? WHERE quiz_id = ? AND question_id = ?", (option.upper(), user.data["quiz_id"], user.data["ques_id"]))
+				self.database.commit()
+			option = {"a": "الف", "b": "ب", "c": "پ", "d": "ت"}[option]
+			await message.edit_text(f"گزینه {option} به عنوان گزینه صحیح انتخواب شد!")
+			del self.task_performer.users[user_id]
+		else:
+			await callback_query.answer("شما دسترسی مورد نیاز را ندارید")
 
 class DNRTUOInlines(InlineAttributes):
 	"""دکمه‌هایی که نیازی به TemporaryUser ندارند."""
@@ -1720,12 +1757,9 @@ class DNRTUOInlines(InlineAttributes):
 					f"\nمنتشر شده: {'بله' if quiz[-1] == 1 else 'خیر'}"
 				)
 
-				inline.append([
-					(
-						f"ویرایش آزمون {i}",
-						f"edit_quiz:{quiz[0]}"
-					)
-				])
+				inline.append(
+					[(f"ویرایش آزمون {i}", f"edit_quiz:{quiz[0]}"), (f"حذف آزمون {i}", f"delete_quiz:{quiz[0]}")]
+				)
 
 		else:
 			text = "فعلاً هیچ آزمونی اضافه نکرده‌اید."
@@ -1742,6 +1776,18 @@ class DNRTUOInlines(InlineAttributes):
 			reply_markup=self.create_inline_keyboard(inline),
 			parse_mode="Markdown"
 		)
+	
+	async def delete_quiz(self, params: tuple, message: Message, user_id: int, callback_query: CallbackQuery):
+		"""حذف یک آزمون"""
+		quiz_id = params[0]
+		if self.task_performer.check_access_to_quiz(quiz_id, user_id):
+			async with self.lock:
+				self.cursor.execute("DELETE FROM quizzes WHERE quiz_id = ? ", (quiz_id,))
+				self.database.commit()
+			await callback_query.answer("این آزمون با موفقیت حذف شد!")
+			await self.display_teacher_quizs((), message, user_id, callback_query)
+		else:
+			await callback_query.answer("شما دسترسی مورد نیاز را ندارید")
 
 	async def create_new_quize(
 		self,
@@ -1770,22 +1816,9 @@ class DNRTUOInlines(InlineAttributes):
 	):
 		"""انتخاب کلاس برای ساخت آزمون"""
 
-		class_id, class_name, state_id = params
-		class_id = int(class_id)
+		class_id, class_name = params
 
 		user = self.task_performer.users.get(user_id)
-
-		if user is None:
-			await callback_query.answer("این عملیات منقضی شده است.")
-			return
-
-		if user.state != UserStates.NONE:
-			await callback_query.answer("این دکمه دیگر معتبر نیست.")
-			return
-
-		if not self.validate_state_id(user, state_id):
-			await callback_query.answer("این دکمه دیگر معتبر نیست.")
-			return
 
 		async with self.lock:
 			self.cursor.execute(
@@ -1887,6 +1920,12 @@ class DNRTUOInlines(InlineAttributes):
 					],
 					[
 						(
+							"مشاهده سوالات",
+							f"disply_questions_to_teacher:{quiz_id}"
+						)
+					],
+					[
+						(
 							published_status[0],
 							f"quiz_release:{quiz_id}&{published_status[1]}"
 						)
@@ -1975,13 +2014,7 @@ class DNRTUOInlines(InlineAttributes):
 				"این آزمون دیگه وجود نداره"
 			)
 
-	async def add_question(
-		self,
-		params: tuple,
-		message: Message,
-		user_id: int,
-		callback_query: CallbackQuery
-	):
+	async def add_question(self, params: tuple, message: Message, user_id: int, callback_query: CallbackQuery):
 		"""شروع افزودن سوال جدید به آزمون"""
 
 		quiz_id = int(params[0])
@@ -2044,8 +2077,84 @@ class DNRTUOInlines(InlineAttributes):
 			await callback_query.answer(
 				"شما دسترسی مورد نیاز را ندارید"
 			)
+	
+	async def disply_questions_to_teacher(self, params: tuple, message: Message, user_id: int, callback_query: CallbackQuery):
+		"""نمایش سوالات به دبیر برای ویرایش"""
+		quiz_id = params[0]
+		if self.task_performer.check_access_to_quiz(quiz_id, user_id):
+			async with self.lock:
+				self.cursor.execute("SELECT * FROM questions WHERE quiz_id = ?", (quiz_id,))
+				questions = self.cursor.fetchall()
+			if questions:
+				text = "*سوالات*"
+				inline = []
+				abcd = {"A": "الف", "B": "ب", "C": "پ", "D": "ت"}
+				for i, q in enumerate(questions, start=1):
+					true = abcd[q[7]]
+					text += (
+						f"\n\n📌 *سؤال شماره {i}*"
+						f"\n━━━━━━━━━━━━━━"
+						f"\n❓ *متن سؤال:*\n{q[2]}"
+						f"\n\n🅰️ الف) {q[3]}"
+						f"\n🅱️ ب) {q[4]}"
+						f"\n🅿️ پ) {q[5]}"
+						f"\n🆃 ت) {q[6]}"
+						f"\n\n✅ *پاسخ صحیح:* {true}"
+						f"\n━━━━━━━━━━━━━━"
+					)
+					inline.append(
+					[(f"ویرایش سوال {i}", f"edit_question:{q[1]}&{q[0]}"), (f"حذف سوال {i}", f"delete_question:{q[1]}&{q[0]}")]
+					)
+				inline.append(self.back_to_menu_button)
+				await message.edit_text(text, reply_markup=self.create_inline_keyboard(inline), parse_mode="Markdown")
+				
+			else:
+				await message.edit_text("هیچ سوالی وجود ندارد", reply_markup=InlineKeyboardMarkup([self.task_performer.back_to_menu_button2]))
+		else:
+			await callback_query.answer("شما دسترسی مورد نیاز را ندارید")
+	
+	async def delete_question(self, params: tuple, message: Message, user_id: int, callback_query: CallbackQuery):
+		"""حذف یک سوال"""
+		quiz_id, ques_id = params
+		if self.task_performer.check_access_to_quiz(quiz_id, user_id):
+			async with self.lock:
+				self.cursor.execute("DELETE FROM questions WHERE quiz_id = ? AND question_id = ?", (quiz_id, ques_id))
+				self.database.commit()
+			await self.disply_questions_to_teacher((quiz_id, ques_id), message, user_id, callback_query)
+		else:
+			await callback_query.answer("شما دسترسی مورد نیاز را ندارید")
+	
+	async def edit_question(self, params: tuple, message: Message, user_id: int, callback_query: CallbackQuery):
+		"""نمایش منوی ویرایش سوال"""
+		quiz_id, question_id = params
+		
+		if self.task_performer.check_access_to_quiz(quiz_id, user_id):
+			text = "لطفا مشخص کنید چه چیزی را میخواهید ویرایش کنید."
+			inline = [
+			[("ویرایش متن سوال", f"edit_question_text:{quiz_id}&{question_id}"), ("ویرایش جواب‌ها", f"edit_anwers:{quiz_id}&{question_id}")],
+			self.back_to_menu_button
+			]
+			await message.edit_text(text, reply_markup=self.create_inline_keyboard(inline))
+		else:
+			await callback_query.answer("شما دسترسی مورد نیاز را ندارید")
+	
+	async def edit_question_text(self, params: tuple, message: Message, user_id: int, callback_query: CallbackQuery):
+		"""شروع ویرایش متن سوال"""
+		quiz_id, ques_id = params
+		user = TemporaryUser(state=UserStates.START, type_task=Tasks.EDIT_QUESTION_TEXT)
+		self.task_performer.users[user_id] = user
+		user.data["quiz_id"] = ques_id; user.data["ques_id"] = ques_id
+		await self.task_performer.edit_question_text(message)
 
-
+	async def edit_anwers(self, params: tuple, message: Message, user_id: int, callback_query: CallbackQuery):
+		"""شروع ویرایش جواب های سوال"""
+		quiz_id, ques_id = params
+		user = TemporaryUser(type_task=Tasks.EDIT_ANSWERS)
+		user.data["quiz_id"] = quiz_id; user.data["ques_id"] = ques_id
+		self.task_performer.users[user_id] = user
+		await self.task_performer.edit_answers(message)
+		
+	
 class InlineHandler(RTUOInlines, DNRTUOInlines):
 	def __init__(self, bot, lock, task_performer):
 		InlineAttributes.__init__(

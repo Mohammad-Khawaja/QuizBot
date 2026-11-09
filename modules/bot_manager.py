@@ -357,6 +357,8 @@ class BotManager:
 				user_id,
 				callback_query
 			)
+		else:
+			await callback_query.answer("متدی برای این تعریف نشده است")
 
 	async def DNRTUO_inline_handler(self, action, params, message, user_id, callback_query):
 		"""هندل دکمه‌هایی که به TemporaryUser نیاز ندارند"""
@@ -375,6 +377,8 @@ class BotManager:
 				user_id,
 				callback_query
 			)
+		else:
+			await callback_query.answer("متدی برای این تعریف نشده است")
 
 	def temporary_users_remover(self):
 		"""حذف کاربران موقت غیرفعال از RAM"""
@@ -388,18 +392,19 @@ class BotManager:
 				current_time = time.time()
 
 				users = self.task_performer.users
-
-				keys_users = list(users.keys())
-
-				for user_id in keys_users:
-
-					user = users[user_id]
-
-					if (
-						current_time - user.last_change_time
-						>= user.waiting_time
-					):
-
-						del users[user_id]
-
+				print(type(users))
+				if users:
+					keys_users = list(users.keys())
+	
+					for user_id in keys_users:
+	
+						user = users[user_id]
+	
+						if (
+							current_time - user.last_change_time
+							>= user.waiting_time
+						):
+	
+							del users[user_id]
+	
 			time.sleep(120)
