@@ -71,12 +71,7 @@ class RTUOInlines(InlineAttributes):
 	):
 		"""انتخاب یک کلاس برای درخواست ثبت‌نام دانش‌آموز"""
 
-		if len(params) != 2:
-			await callback_query.answer("اطلاعات دکمه نامعتبر است.")
-			return
-
-		class_id, state_id = params
-		class_id = int(class_id)
+		class_id = params[0]
 
 		user = self.task_performer.users.get(user_id)
 
@@ -188,25 +183,9 @@ class RTUOInlines(InlineAttributes):
 	):
 		"""انتخاب گزینه درست هنگام افزودن سؤال جدید"""
 
-		if len(params) != 2:
-			await callback_query.answer("اطلاعات دکمه نامعتبر است.")
-			return
-
-		option, state_id = params
+		option = params[0]
 
 		user = self.task_performer.users.get(user_id)
-
-		if user is None:
-			await callback_query.answer("این عملیات منقضی شده است.")
-			return
-
-		if user.state != UserStates.NONE:
-			await callback_query.answer("این دکمه دیگر معتبر نیست.")
-			return
-
-		if not self.validate_state_id(user, state_id):
-			await callback_query.answer("این دکمه دیگر معتبر نیست.")
-			return
 
 		correct_options = {
 			"الف": "A",
@@ -410,10 +389,6 @@ class DNRTUOInlines(InlineAttributes):
 		callback_query
 	):
 		"""انتخاب یک کلاس برای دبیر شدن و ارسال درخواست"""
-
-		if len(params) != 1:
-			await callback_query.answer("اطلاعات دکمه نامعتبر است.")
-			return
 
 		class_id = int(params[0])
 
@@ -1016,10 +991,6 @@ class DNRTUOInlines(InlineAttributes):
 	):
 		"""نمایش دانش‌آموزان کلاس انتخاب‌شده"""
 
-		if len(params) != 1:
-			await callback_query.answer("اطلاعات دکمه نامعتبر است.")
-			return
-
 		class_id = int(params[0])
 
 		async with self.lock:
@@ -1091,10 +1062,6 @@ class DNRTUOInlines(InlineAttributes):
 		callback_query
 	):
 		"""اخراج یک دانش‌آموز از یک کلاس"""
-
-		if len(params) != 2:
-			await callback_query.answer("اطلاعات دکمه نامعتبر است.")
-			return
 
 		student_user_id, class_id = map(int, params)
 
@@ -1191,10 +1158,6 @@ class DNRTUOInlines(InlineAttributes):
 		callback_query
 	):
 		"""اخراج یک دبیر از یک کلاس"""
-
-		if len(params) != 2:
-			await callback_query.answer("اطلاعات دکمه نامعتبر است.")
-			return
 
 		teacher_user_id, class_id = map(int, params)
 
@@ -1329,10 +1292,6 @@ class DNRTUOInlines(InlineAttributes):
 		callback_query
 	):
 		"""شروع درخواست تغییر نام کلاس"""
-
-		if len(params) != 1:
-			await callback_query.answer("اطلاعات دکمه نامعتبر است.")
-			return
 
 		class_id = int(params[0])
 
@@ -1811,10 +1770,6 @@ class DNRTUOInlines(InlineAttributes):
 	):
 		"""انتخاب کلاس برای ساخت آزمون"""
 
-		if len(params) != 3:
-			await callback_query.answer("اطلاعات دکمه نامعتبر است.")
-			return
-
 		class_id, class_name, state_id = params
 		class_id = int(class_id)
 
@@ -1867,10 +1822,6 @@ class DNRTUOInlines(InlineAttributes):
 		callback_query: CallbackQuery
 	):
 		"""ویرایش آزمون و نمایش منوی ویرایش"""
-
-		if len(params) != 1:
-			await callback_query.answer("اطلاعات دکمه نامعتبر است.")
-			return
 
 		quiz_id = int(params[0])
 
@@ -1969,10 +1920,6 @@ class DNRTUOInlines(InlineAttributes):
 	):
 		"""انتشار و برداشتن از حالت انتشار یک آزمون"""
 
-		if len(params) != 2:
-			await callback_query.answer("اطلاعات دکمه نامعتبر است.")
-			return
-
 		quiz_id, release = map(int, params)
 
 		async with self.lock:
@@ -2037,10 +1984,6 @@ class DNRTUOInlines(InlineAttributes):
 	):
 		"""شروع افزودن سوال جدید به آزمون"""
 
-		if len(params) != 1:
-			await callback_query.answer("اطلاعات دکمه نامعتبر است.")
-			return
-
 		quiz_id = int(params[0])
 
 		if self.task_performer.check_access_to_quiz(
@@ -2051,8 +1994,16 @@ class DNRTUOInlines(InlineAttributes):
 				state=UserStates.START,
 				type_task=Tasks.ADD_QUESTION
 			)
-
-			user.data["number_question"] = 1
+			
+			async with self.lock:
+				self.cursor.execute("SELECT COUNT(*) FROM questions WHERE quiz_id = ? ", (quiz_id,))
+				r = self.cursor.fetchone()
+			if r:
+				number = r[0]
+			else:
+				await callback_query.answer("این آزمون دیگه وجود نداره")
+				return
+			user.data["number_question"] = number
 			user.data["quiz_id"] = quiz_id
 
 			self.task_performer.users[user_id] = user
@@ -2072,10 +2023,6 @@ class DNRTUOInlines(InlineAttributes):
 		callback_query: CallbackQuery
 	):
 		"""شروع ویرایش عنوان یک آزمون"""
-
-		if len(params) != 1:
-			await callback_query.answer("اطلاعات دکمه نامعتبر است.")
-			return
 
 		quiz_id = int(params[0])
 

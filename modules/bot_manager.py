@@ -198,7 +198,7 @@ class BotManager:
 			expired = False
 			if (user:=self.users.get(user_id)) is None:
 				expired = True
-			if schemas["state_ids"] not in user.ids:
+			elif schemas["state_id"] not in user.ids:
 				expired = True
 			if expired:
 				return (False, None, "این دکمه منقضی شده است.")

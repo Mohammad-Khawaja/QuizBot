@@ -7,7 +7,7 @@ from telegram.ext import ContextTypes
 
 import modules.long_texts as long_texts
 from .united import UserStates, Tasks, TemporaryUser
-
+from .callack_schemas import CALLBACK_SCHEMAS
 
 class TaskPerformer:
 	def __init__(self, bot, token):
@@ -514,7 +514,7 @@ class TaskPerformer:
 				)
 
 			else:
-				button_id = str(uuid4().hex[:12])
+				button_id = CALLBACK_SCHEMAS["select_correct_option"]["state_id"]
 				user.ids.append(button_id)
 
 				await message.reply_text(
@@ -524,25 +524,25 @@ class TaskPerformer:
 							[
 								(
 									"الف",
-									f"select_correct_option:الف&{button_id}"
+									f"select_correct_option:الف"
 								)
 							],
 							[
 								(
 									"ب",
-									f"select_correct_option:ب&{button_id}"
+									f"select_correct_option:ب"
 								)
 							],
 							[
 								(
 									"پ",
-									f"select_correct_option:پ&{button_id}"
+									f"select_correct_option:پ"
 								)
 							],
 							[
 								(
 									"ت",
-									f"select_correct_option:ت&{button_id}"
+									f"select_correct_option:ت"
 								)
 							]
 						]

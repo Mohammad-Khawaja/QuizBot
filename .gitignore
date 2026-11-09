@@ -1,4 +1,5 @@
 keys.env
 database/quiz.db
+database/quiz.db-journal
 __pycache__/
 *.pyc
